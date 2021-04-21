@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  gateway-server:
+    environment:
+      - TZ=Asia/Tashkent
+      - spring.profiles.active=Development
+      - IMAGETAG=${IMAGETAG}
+    image: ${IMAGE}
+    ports:
+      - "10100:10100"
+    deploy:
+      mode: replicated
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 1s
+        order: stop-first
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 1536M
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    networks:
+      - dev-gateway-net
+      - dev-sys-net
+    extra_hosts:
+      - docker.lan:192.168.10.12
+
+networks:
+  dev-gateway-net:
+    external: true
+  dev-sys-net:
+    external: true

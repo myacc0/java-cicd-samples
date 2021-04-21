@@ -1,0 +1,63 @@
+image: 192.168.10.12:5000/docker-custom:latest
+
+variables:
+  VERSION: '1.0.$CI_PIPELINE_ID'
+  FILEVERSION: '1.0.$CI_PIPELINE_ID.0'
+  LIVE_ENV: 'Production'
+  DEV_ENV: 'Development'
+  REGISTRY: '192.168.10.12:5000'
+  SERVER: '192.168.10.12'
+  USER: 'administrator'
+  MAVEN_CLI_OPTS: '-s .m2/settings.xml --batch-mode'
+  MAVEN_OPTS: '-Dmaven.repo.local=.m2/repository'
+  MAVEN_REPO_URL: 'http://192.168.10.12:5081'
+  MAVEN_REPO_USER: 'admin'
+  MAVEN_REPO_PASS: 'admin123'
+  SERVICE_NAME: 'lists-service'
+  IMAGETAG: '$SERVICE_NAME:lts'
+  GROUP_ID: 'mironsoft'
+  PORT: '19500'
+
+stages:
+  - stop
+  - build
+  - deploy
+
+before_script:
+  - if [ "$CI_COMMIT_REF_SLUG" = "master" ]; then export BUILDTAG=$VERSION ; else export BUILDTAG=$VERSION-$CI_COMMIT_REF_SLUG ; fi
+
+dev-stop:
+  stage: stop
+  script:
+    - /bin/bash service-stop.sh $SERVER "$SSH_PRIVATE_KEY" $USER $DEV_ENV $SERVICE_NAME $IMAGETAG
+  when: manual
+
+live-stop:
+  stage: stop
+  script:
+    - /bin/bash service-stop.sh $SERVER "$SSH_PRIVATE_KEY" $USER $LIVE_ENV $SERVICE_NAME $IMAGETAG
+  when: manual
+
+MAVEN:
+  stage: build
+  image: $REGISTRY/maven:3.6.3-jdk-11
+  script:
+    - mvn $MAVEN_CLI_OPTS $MAVEN_OPTS "-DMAVEN_REPO_URL=$MAVEN_REPO_URL" -Drevision=$BUILDTAG -Dmaven.test.skip=true clean deploy
+  allow_failure: false
+  only:
+    - master
+
+dev-deploy:
+  stage: deploy
+  script:
+    - /bin/bash push-service-image.sh $IMAGETAG $MAVEN_REPO_URL $MAVEN_REPO_USER $MAVEN_REPO_PASS $BUILDTAG $GROUP_ID $SERVICE_NAME $DEV_ENV
+    - /bin/bash service-run.sh $PORT
+#    - /bin/bash service-deploy.sh $SERVER "$SSH_PRIVATE_KEY" $USER $DEV_ENV $IMAGETAG $SERVICE_NAME $BUILDTAG
+  when: manual
+
+live-deploy:
+  stage: deploy
+  script:
+    - /bin/bash push-service-image.sh $IMAGETAG $MAVEN_REPO_URL $MAVEN_REPO_USER $MAVEN_REPO_PASS $BUILDTAG $GROUP_ID $SERVICE_NAME $LIVE_ENV
+    - /bin/bash service-deploy.sh $SERVER "$SSH_PRIVATE_KEY" $USER $LIVE_ENV $IMAGETAG $SERVICE_NAME $BUILDTAG
+  when: manual
